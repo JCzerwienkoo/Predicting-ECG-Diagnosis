@@ -1,0 +1,8 @@
+Training_WFDB/
+*.mat
+*.hea
+
+venv/
+.ipynb_chceckpoints/
+__pycache__/
+

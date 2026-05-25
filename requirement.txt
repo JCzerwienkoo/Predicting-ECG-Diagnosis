@@ -1,0 +1,5 @@
+wfdb
+kagglehub
+matplotlib
+numpy
+pandas
