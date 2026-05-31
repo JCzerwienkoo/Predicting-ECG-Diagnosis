@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import wfdb
 from data_loader import get_data_path
 from collections import Counter
+from scipy import signal
+import numpy as np
 
 def plot_diagnosis_distribution(patients):
     all_dx = []
@@ -96,3 +98,35 @@ def plot_ecg(data_dir, record_name, save=False):
         if save:
             plt.savefig(f'plots/ecg_{record_name}_part{fig_num+1}.png', dpi=150, bbox_inches='tight')
         plt.show()
+
+def plot_ecg_spectrogram(data_dir, record_name, save=False):
+    """
+    Converts 1D ECG time-series data from Lead II into a 2D Spectrogram image.
+    """
+    
+    record = wfdb.rdrecord(os.path.join(data_dir, record_name))
+    fs = record.fs  
+    
+    lead_index = 1
+    raw_signal = record.p_signal[:, lead_index]
+    lead_name = record.sig_name[lead_index]
+
+    b, a = signal.butter(3, [0.5, 45], btype='bandpass', fs=fs)
+    filtered_signal = signal.filtfilt(b, a, raw_signal)
+
+    frequencies, times, spect = signal.spectrogram(filtered_signal, fs=fs, nperseg=int(fs * 0.5))
+    
+    spect_db = 10 * np.log10(spect + 1e-10)
+
+    plt.figure(figsize=(10, 5))
+    plt.pcolormesh(times, frequencies, spect_db, shading='gouraud', cmap='viridis')
+    
+    plt.title(f'2D Spectrogram (Time-Frequency) - Lead: {lead_name} | Patient: {record_name}')
+    plt.ylabel('Frequency [Hz]')
+    plt.xlabel('Time [seconds]')
+    plt.colorbar(label='Intensity [dB]')
+    plt.tight_layout()
+
+    if save:
+        plt.savefig(f'plots/spectrogram_{record_name}.png', dpi=150, bbox_inches='tight')
+    plt.show()
