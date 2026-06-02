@@ -1,5 +1,5 @@
 wfdb
-kagglehub
+kagglehub!=1.0.1
 matplotlib
 numpy
 pandas
