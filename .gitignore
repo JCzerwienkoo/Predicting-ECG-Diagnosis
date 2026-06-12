@@ -6,3 +6,5 @@ venv/
 .ipynb_chceckpoints/
 __pycache__/
 
+spectral_data/
+models/
