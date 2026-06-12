@@ -3,3 +3,7 @@ kagglehub!=1.0.1
 matplotlib
 numpy
 pandas
+scikit-learn
+iterative-stratification
+keras
+tensorflow
