@@ -1,4 +1,5 @@
 import os
+import keras
 import matplotlib.pyplot as plt
 import wfdb
 from collections import Counter
@@ -9,14 +10,35 @@ from plot import plot_diagnosis_distribution
 from plot import plot_demographics
 from plot import plot_ecg
 from plot import plot_ecg_spectrogram
-from plot import plot_multilabel_evaluation
+from plot import plot_multilabel_evaluation, plot_training_history
 from processing import flatten_data_linear, train_test_split, load_precomputed, precompute_and_save, process_entry, process_labels, convert_data_to_vectors, transpose_entries, trim_data_to_shortest
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 from sklearn.model_selection import KFold
 import pickle as pkl
 
 SAMPLE_SVM = lambda *kwargs: SVMModel("default")
-SAMPLE_CNN = lambda input_shape, num_labels: CNNModel("default", input_shape, num_labels)
+SAMPLE_CNN = lambda input_shape, num_labels: CNNModel("default", input_shape, num_labels, {
+    "layers": [
+        keras.layers.Conv2D(64, kernel_size=(3,3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal()),
+        keras.layers.BatchNormalization(),
+        keras.layers.MaxPooling2D(pool_size=(2, 2)),
+        keras.layers.Dropout(0.15),
+
+        keras.layers.Conv2D(128, kernel_size=(3,3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal()),
+        keras.layers.BatchNormalization(),
+        keras.layers.MaxPooling2D(pool_size=(2, 2)),
+        keras.layers.Dropout(0.35),
+
+        keras.layers.Conv2D(256, kernel_size=(3,3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal()),
+        keras.layers.BatchNormalization(),
+        keras.layers.MaxPooling2D(pool_size=(2, 2)),
+        keras.layers.Dropout(0.35),
+
+        keras.layers.GlobalAveragePooling2D(),
+        keras.layers.Dense(128, activation="relu"),
+        keras.layers.Dropout(0.40),
+    ]
+})
 SAMPLE_RESNET = lambda input_shape, num_labels: ResNet("default", input_shape, num_labels)
 
 MODELS = [
@@ -87,11 +109,18 @@ def test():
     X = trim_data_to_shortest(X)
     X, Y, X_test, Y_test = train_test_split(X, Y)
     
-    
     model: SVMModel = None
     with open("./models/cnn-default.pkl", "rb") as f:
         model = pkl.load(f)
-        
+
+    if model.training_history is not None:
+        plot_training_history(
+            model.training_history,
+            model_name=f'{model.model_name}-{model.variant_name}',
+            save=True,
+            output_prefix='plots/training'
+        )
+
     Y_pred = model.predict(X_test)
 
     plot_multilabel_evaluation(

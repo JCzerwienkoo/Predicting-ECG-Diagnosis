@@ -135,6 +135,62 @@ def plot_ecg_spectrogram(data_dir, record_name, save=False):
         plt.savefig(f'plots/spectrogram_{record_name}.png', dpi=150, bbox_inches='tight')
     plt.show()
 
+def plot_training_history(history, model_name='model', save=False, output_prefix='plots/training'):
+    """Plot loss and all tracked metrics from a Keras History object over epochs."""
+    if hasattr(history, 'history'):
+        hist_dict = history.history
+    elif isinstance(history, dict):
+        hist_dict = history
+    else:
+        raise ValueError('history must be a Keras History object or a plain dict')
+
+    if not hist_dict:
+        print('Training history is empty, skipping plot.')
+        return
+
+    # Separate metrics from their validation counterparts
+    train_keys = [k for k in hist_dict if not k.startswith('val_')]
+    val_keys = [f'val_{k}' for k in train_keys if f'val_{k}' in hist_dict]
+
+    n_metrics = len(train_keys)
+    cols = min(2, n_metrics)
+    rows = int(np.ceil(n_metrics / cols))
+
+    if save:
+        os.makedirs(os.path.dirname(output_prefix) or '.', exist_ok=True)
+
+    fig, axes = plt.subplots(rows, cols, figsize=(7 * cols, 4 * rows))
+    axes = np.array(axes).reshape(rows, cols)
+    epochs = range(1, len(hist_dict[train_keys[0]]) + 1)
+
+    for idx, key in enumerate(train_keys):
+        r = idx // cols
+        c = idx % cols
+        ax = axes[r, c]
+
+        ax.plot(epochs, hist_dict[key], label=f'Train {key}', linewidth=1.8, color='steelblue')
+        val_key = f'val_{key}'
+        if val_key in hist_dict:
+            ax.plot(epochs, hist_dict[val_key], label=f'Val {key}', linewidth=1.8,
+                    color='darkorange', linestyle='--')
+
+        ax.set_title(key.replace('_', ' ').title())
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('Value')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+    # Hide unused subplots
+    for idx in range(len(train_keys), rows * cols):
+        axes[idx // cols, idx % cols].axis('off')
+
+    plt.suptitle(f'Training history — {model_name}', fontsize=13)
+    plt.tight_layout()
+    if save:
+        plt.savefig(f'{output_prefix}_history.png', dpi=180, bbox_inches='tight')
+    plt.show()
+
+
 def plot_multilabel_evaluation(y_true, y_pred, label_names, save=False, output_prefix='plots/multilabel_eval'):
     """Plot multilabel evaluation charts that are readable for many label combinations."""
     y_true = np.asarray(y_true)

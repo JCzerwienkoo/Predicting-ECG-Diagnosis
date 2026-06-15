@@ -72,7 +72,7 @@ class Model(metaclass=ABCMeta):
         self.model = None
         self.epoch_count = epoch_count
         
-        self.training_history = []
+        self.training_history = None
     
     def save(self):
         with open(f"./models/{self.model_name}-{self.variant_name}.pkl", "wb") as f:
@@ -138,31 +138,14 @@ class CNNModel(Model):
         
     def create_model(self, input_shape, num_labels, config):
         inputs = keras.Input(shape=input_shape)
-        
-        hidden_layer_activation = config.get("hidden_layer_activation", "relu")
-        kernel_size = config.get("kernel_size", (3,3))
+       
+        layers = config.get("layers")
         
         x = keras.layers.BatchNormalization()(inputs)
+        for layer in layers:
+            x = layer(x)
+            
         
-        x = keras.layers.Conv2D(64, kernel_size=kernel_size, padding="same", activation=hidden_layer_activation, kernel_initializer=keras.initializers.he_normal())(x)
-        x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
-        x = keras.layers.Dropout(0.15)(x)
-
-        x = keras.layers.Conv2D(128, kernel_size=kernel_size, padding="same", activation=hidden_layer_activation, kernel_initializer=keras.initializers.he_normal())(x)
-        x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
-        x = keras.layers.Dropout(0.35)(x)
-
-        x = keras.layers.Conv2D(256, kernel_size=kernel_size, padding="same", activation=hidden_layer_activation, kernel_initializer=keras.initializers.he_normal())(x)
-        x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.MaxPooling2D(pool_size=(2, 2))(x)
-        x = keras.layers.Dropout(0.35)(x)
-
-        x = keras.layers.GlobalAveragePooling2D()(x)
-        x = keras.layers.Dense(128, activation="relu")(x)
-        x = keras.layers.Dropout(0.40)(x)
-
         outputs = keras.layers.Dense(num_labels, activation="sigmoid")(x)
 
         model = keras.Model(inputs, outputs)
@@ -181,7 +164,7 @@ class CNNModel(Model):
         X = self.transform_data(X)
         fit_results = self.model.fit(X, Y, epochs=self.epoch_count)
         
-        Y_pred = self.model.predict(X)
+        self.training_history = fit_results
         
         # self.thresholds = tune_thresholds_per_label(Y, Y_pred, base_thresholds=self.thresholds)
         
@@ -284,7 +267,9 @@ class ResNet(Model):
         X = self.transform_data(X)
         fit_results = self.model.fit(x=X, y=Y, epochs=self.epoch_count)
         
-        Y_pred = self.model.predict(X)
+        self.training_history = fit_results
+        
+        # Y_pred = self.model.predict(X)
         
         # self.thresholds = tune_thresholds_per_label(Y, Y_pred, base_thresholds=self.thresholds)
         
