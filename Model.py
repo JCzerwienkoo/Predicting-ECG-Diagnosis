@@ -11,6 +11,8 @@ import keras_hub
 from sklearn.metrics import fbeta_score
 import tensorflow as tf
 
+from processing import flatten_data_linear, transpose_entries
+
 def tune_thresholds_per_label(y_true, y_prob, beta=2.0, grid=None, base_thresholds = None):
     y_true = np.asarray(y_true).astype(int)
     y_prob = np.asarray(y_prob)
@@ -93,30 +95,43 @@ class Model(metaclass=ABCMeta):
     def predict(self, X):
         pass
     
+    @abstractmethod
+    def transform_data(self, X):
+        pass
+    
     
 class SVMModel(Model):
-    def __init__(self, variant_name, *kwargs, config):
+    def __init__(self, variant_name, *kwargs, config = {}):
         super().__init__("svm", config.get("epoch_count", 1))
         self.variant_name = variant_name
         self.model = MultiOutputClassifier(LinearSVC(*kwargs), n_jobs=14)
         
     def train(self, X: np.array, Y):
+        X = self.transform_data(X)
         X = X[:, :, 0]
         self.model.fit(X, Y)
     
     def _test(self, X, Y):
+        X = self.transform_data(X)
         X = X[:, :, 0]
         return 1 - self.model.score(X, Y)
     
     def predict(self, X):
+        X = self.transform_data(X)
+        X = X[:, :, 0]
         return self.model.predict(X)
+    
+    def transform_data(self, X):
+        return flatten_data_linear(X)
 
 
 class CNNModel(Model):
     def __init__(self, variant_name, input_shape, num_labels, config: dict = {}):
         super().__init__("cnn", config.get("epoch_count", 20))
         self.variant_name = variant_name
-        self.model = self.create_model(input_shape, num_labels, config or {})
+        # hackish
+        transformed_shape = self.transform_data(np.zeros([1, *input_shape])).shape[1:]
+        self.model = self.create_model(transformed_shape, num_labels, config or {})
         
         self.thresholds = np.full(num_labels, 0.5, dtype=float)
         
@@ -163,6 +178,7 @@ class CNNModel(Model):
         
         
     def train(self, X, Y):
+        X = self.transform_data(X)
         fit_results = self.model.fit(X, Y, epochs=self.epoch_count)
         
         Y_pred = self.model.predict(X)
@@ -172,9 +188,11 @@ class CNNModel(Model):
         return fit_results
     
     def _test(self, X, Y):
+        X = self.transform_data(X)
         return self.model.evaluate(X, Y, return_dict=True)["loss"]
     
     def predict(self, X):
+        X = self.transform_data(X)
         prediction = self.model.predict(X)
         
         y_pred = []
@@ -185,13 +203,18 @@ class CNNModel(Model):
             y_pred.append(np.array(binarized).astype(int))
 
         return np.array(y_pred)
+    
+    def transform_data(self, X):
+        return transpose_entries(X)
         
 
 class ResNet(Model):
     def __init__(self, variant_name, input_shape, num_labels, config: dict = {}):
         super().__init__("resnet", config.get("epoch_count", 3))
         self.variant_name = variant_name
-        self.model = self.create_model(input_shape, num_labels, config or {})
+        # hackish
+        transformed_shape = self.transform_data(np.zeros([1, *input_shape])).shape[1:]
+        self.model = self.create_model(transformed_shape, num_labels, config or {})
         
         self.thresholds = np.full(num_labels, 0.5, dtype=float)
         
@@ -258,6 +281,7 @@ class ResNet(Model):
         
         
     def train(self, X, Y):
+        X = self.transform_data(X)
         fit_results = self.model.fit(x=X, y=Y, epochs=self.epoch_count)
         
         Y_pred = self.model.predict(X)
@@ -267,9 +291,11 @@ class ResNet(Model):
         return fit_results
     
     def _test(self, X, Y):
+        X = self.transform_data(X)
         return self.model.evaluate(X, Y, return_dict=True)["loss"]
     
     def predict(self, X):
+        X = self.transform_data(X)
         prediction = self.model.predict(X)
         
         y_pred = []
@@ -280,3 +306,6 @@ class ResNet(Model):
             y_pred.append(np.array(binarized).astype(int))
 
         return np.array(y_pred)
+    
+    def transform_data(self, X):
+        return transpose_entries(X)

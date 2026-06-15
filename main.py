@@ -61,7 +61,6 @@ def main():
     X, Y, X_test, Y_test = train_test_split(X, Y)
     
     X = trim_data_to_shortest(X)
-    X = transpose_entries(X)
     
     k_fold = MultilabelStratifiedKFold(n_splits=3, shuffle=True)
     
@@ -86,7 +85,6 @@ def test():
     X,Y = convert_data_to_vectors(data)
     Y, mlb = process_labels(Y)
     X = trim_data_to_shortest(X)
-    X = transpose_entries(X)
     X, Y, X_test, Y_test = train_test_split(X, Y)
     
     
@@ -110,5 +108,5 @@ def test():
 if __name__ == "__main__":
     # precompute()
     
-    # main()
+    main()
     test()
