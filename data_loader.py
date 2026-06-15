@@ -13,7 +13,7 @@ def get_data_path(local_folder="Training_WFDB"):
 def load_all_metadata(data_dir):
     patients = []
     
-    all_files = os.listdir(data_dir)
+    all_files = sorted(os.listdir(data_dir))
     
     for filename in all_files:
         if filename.endswith('.hea'):

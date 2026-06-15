@@ -5,6 +5,7 @@ import wfdb
 from data_loader import get_data_path, load_all_metadata
 from collections import Counter
 from scipy import signal
+from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
 from sklearn.preprocessing import MultiLabelBinarizer
 import numpy as np
 import pickle as pkl
@@ -43,13 +44,12 @@ def process_entry(data_dir, record_name):
 
         _a, _b, spect = signal.spectrogram(filtered_signal, fs=fs, nperseg=32)
         
-        spect_db = 10 * np.log10(spect + 1e-10)
+        spect_db = (10 * np.log10(spect + 1e-10)).astype(np.float32)
         data.append(spect_db)
         
         
     return {
-        "record": record,
-        "data": np.array(data),
+        "data": np.array(data, dtype=np.float32),
         "label": comment_to_labels(record.comments[2])
     }
     
@@ -85,12 +85,12 @@ def load_precomputed(input):
 def convert_data_to_vectors(data):
     return [r['data'] for r in data], [r['label'] for r in data]
 
-def process_labels(Y):
-    mlb = MultiLabelBinarizer()
+def process_labels(Y, classes=None):
+    mlb = MultiLabelBinarizer(classes=classes)
     return mlb.fit_transform(Y), mlb
 
 def flatten_data_linear(data):
-    return np.array([np.reshape(x, (-1, 1)) for x in data])
+    return np.array([np.ravel(x) for x in data])
 
 def transpose_entries(data):
     return np.array([x.T for x in data])
@@ -104,9 +104,35 @@ def trim_data_to_shortest(data):
             shortest = length
     
     return np.array([i[:, :, :shortest] for i in data])
+
+def resize_data_to_length(data, target_length):
+    resized = []
+    for d in data:
+        current_length = d.shape[2]
+
+        if current_length >= target_length:
+            resized.append(d[:, :, :target_length])
+        else:
+            pad_width = target_length - current_length
+            resized.append(np.pad(d, ((0, 0), (0, 0), (0, pad_width)), mode="edge"))
+
+    return np.array(resized)
     
 
-def train_test_split(X, Y,  ratio = 0.8):
-    split_point = int(len(X) * ratio)
-    return X[:split_point], Y[:split_point], X[split_point:], Y[split_point:]
+def take_rows(data, indices):
+    if isinstance(data, np.ndarray):
+        return data[indices]
+
+    return [data[i] for i in indices]
+
+def train_test_split(X, Y, ratio=0.8, random_state=42):
+    splitter = MultilabelStratifiedShuffleSplit(
+        n_splits=1,
+        test_size=1 - ratio,
+        random_state=random_state,
+    )
+    row_ids = np.arange(len(Y)).reshape(-1, 1)
+    train_index, test_index = next(splitter.split(row_ids, Y))
+
+    return take_rows(X, train_index), Y[train_index], take_rows(X, test_index), Y[test_index]
     
