@@ -6,6 +6,7 @@ from data_loader import get_data_path, load_all_metadata
 from collections import Counter
 from scipy import signal
 from sklearn.preprocessing import MultiLabelBinarizer
+from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
 import numpy as np
 import pickle as pkl
 
@@ -154,7 +155,19 @@ def trim_data_to_shortest(data):
     return np.array([i[:, :, :shortest] for i in data])
     
 
-def train_test_split(X, Y,  ratio = 0.8):
-    split_point = int(len(X) * ratio)
-    return X[:split_point], Y[:split_point], X[split_point:], Y[split_point:]
-    
+def take_rows(data, indices):
+    if isinstance(data, np.ndarray):
+        return data[indices]
+
+    return [data[i] for i in indices]
+
+def train_test_split(X, Y, ratio=0.8, random_state=42):
+    splitter = MultilabelStratifiedShuffleSplit(
+        n_splits=1,
+        test_size=1 - ratio,
+        random_state=random_state,
+    )
+    row_ids = np.arange(len(Y)).reshape(-1, 1)
+    train_index, test_index = next(splitter.split(row_ids, Y))
+
+    return take_rows(X, train_index), Y[train_index], take_rows(X, test_index), Y[test_index]
