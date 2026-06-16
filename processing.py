@@ -30,12 +30,21 @@ def comment_to_labels(l: str):
     
     return l.split(",")
 
+# v1 oversampling set
 RARE_LABELS = [
     "164931005",
-    "284470004",
+    "270492004",
     "426783006",
     "429622005"   
 ]
+
+# v2 oversampling set
+# RARE_LABELS = [
+#     "164931005",
+#     "284470004",
+#     "426783006",
+#     "429622005"   
+# ]
 
 def contains_rare_labels(labels: list):
     for l in RARE_LABELS:
