@@ -12,11 +12,13 @@ import tensorflow as tf
 
 from processing import flatten_data_linear, transpose_entries
 
+from sklearn.metrics import f1_score, hamming_loss, jaccard_score, accuracy_score
+
 def tune_thresholds_per_label(y_true, y_prob, beta=2.0, grid=None, base_thresholds = None):
     y_true = np.asarray(y_true).astype(int)
     y_prob = np.asarray(y_prob)
     if grid is None:
-        grid = np.linspace(0.05, 0.95, 19)
+        grid = np.linspace(0.05, 0.95, 45)
 
     n_labels = y_true.shape[1]
     
@@ -39,6 +41,7 @@ def tune_thresholds_per_label(y_true, y_prob, beta=2.0, grid=None, base_threshol
 
     return thresholds
 
+
 def train_and_pick_best(get_model: Callable[[], 'Model'], train_test_pairs, model_params=()):
     best_loss = math.inf
     best_model = None
@@ -51,7 +54,22 @@ def train_and_pick_best(get_model: Callable[[], 'Model'], train_test_pairs, mode
         
         model.train(X_train, Y_train)
         
+        if hasattr(model, "tuned_thresholds"):
+            X_train_trans = model.transform_data(X_train)
+            Y_prob = model.model.predict(X_train_trans)
+            model.tuned_thresholds = tune_thresholds_per_label(Y_train, Y_prob)
+        
         loss = model.test(X_test, Y_test)
+        
+        if hasattr(model, "tuned_thresholds"):
+            X_test_trans = model.transform_data(X_test)
+            Y_test_pred = model.model.predict(X_test_trans)
+            
+            Y_binarized_default = binarize_prediction(Y_test_pred, model.thresholds)
+            Y_binarized_tuned = binarize_prediction(Y_test_pred, model.tuned_thresholds)
+            
+            print(f"Testing threshold tuning default: {accuracy_score(Y_test, Y_binarized_default)}, tuned {accuracy_score(Y_test, Y_binarized_tuned)}")
+            
         
         if loss < best_loss:
             print(f"Trained model is superior {loss} < {best_loss}")
@@ -133,6 +151,7 @@ class CNNModel(Model):
         self.model = self.create_model(transformed_shape, num_labels, config or {})
         
         self.thresholds = np.full(num_labels, 0.5, dtype=float)
+        self.tuned_thresholds = np.full(num_labels, 0.5, dtype=float)
         
         
     def create_model(self, input_shape, num_labels, config):
@@ -177,18 +196,20 @@ class CNNModel(Model):
         X = self.transform_data(X)
         prediction = self.model.predict(X)
         
-        y_pred = []
-        for y in prediction:
-            binarized = []
-            for i in range(len(self.thresholds)):
-                binarized.append(y[i] >= self.thresholds[i])
-            y_pred.append(np.array(binarized).astype(int))
-
-        return np.array(y_pred)
+        return binarize_prediction(prediction, self.thresholds)
     
     def transform_data(self, X):
         return transpose_entries(X)
-        
+
+def binarize_prediction(prediction, thresholds):
+    y_pred = []
+    for y in prediction:
+        binarized = []
+        for i in range(len(thresholds)):
+            binarized.append(y[i] >= thresholds[i])
+        y_pred.append(np.array(binarized).astype(int))
+
+    return np.array(y_pred) 
 
 class ResNet(Model):
     def __init__(self, variant_name, input_shape, num_labels, config: dict = {}):
@@ -293,3 +314,6 @@ class ResNet(Model):
     
     def transform_data(self, X):
         return transpose_entries(X)
+    
+    
+    
