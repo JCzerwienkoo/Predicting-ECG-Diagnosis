@@ -63,7 +63,7 @@ SAMPLE_CNN_V2 = lambda input_shape, num_labels: CNNModel("v2", input_shape, num_
         keras.layers.Dense(128, activation="relu", kernel_regularizer="L1L2"),
         keras.layers.Dropout(0.40),
     ],
-    "epoch_count": 15
+    "epoch_count": 20
 })
 
 SAMPLE_CNN_LTSM = lambda input_shape, num_labels: CNNModel("ltsm", input_shape, num_labels, {
@@ -95,10 +95,34 @@ SAMPLE_CNN_LTSM = lambda input_shape, num_labels: CNNModel("ltsm", input_shape, 
     "epoch_count": 18
 })
 
+
+SAMPLE_CNN_LTSM_TIME_DEPENDENT = lambda input_shape, num_labels: CNNModel("ltsm-time", input_shape, num_labels, {
+    "layers": [
+        keras.layers.Permute((2, 1, 3)),
+        keras.layers.TimeDistributed(keras.layers.Conv1D(64, kernel_size=(3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal())),
+        keras.layers.TimeDistributed(keras.layers.BatchNormalization()),
+        keras.layers.TimeDistributed(keras.layers.SpatialDropout1D(0.25)),
+
+        keras.layers.TimeDistributed(keras.layers.Conv1D(128, kernel_size=(3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal())),
+        keras.layers.TimeDistributed(keras.layers.BatchNormalization()),
+        keras.layers.TimeDistributed(keras.layers.SpatialDropout1D(0.25)),
+
+        keras.layers.TimeDistributed(keras.layers.Conv1D(256, kernel_size=(3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal())),
+        keras.layers.TimeDistributed(keras.layers.BatchNormalization()),
+        keras.layers.TimeDistributed(keras.layers.SpatialDropout1D(0.35)),
+
+        keras.layers.TimeDistributed(keras.layers.GlobalAveragePooling1D()),
+        keras.layers.TimeDistributed(keras.layers.Flatten()),
+
+        keras.layers.LSTM(128),
+        keras.layers.Dense(128, activation="relu"),
+    ],
+    "epoch_count": 18
+})
 SAMPLE_RESNET = lambda input_shape, num_labels: ResNet("default", input_shape, num_labels)
 
 MODELS = [
-    SAMPLE_CNN_LTSM
+    SAMPLE_CNN_LTSM_TIME_DEPENDENT
 ]
 
 def precompute( split_extra_samples=None, length_cap=6):
@@ -119,27 +143,8 @@ def test_spectogram():
     plot_ecg_spectrogram(data_dir, patients[1]['id'], save=True)
     
 
-def main(dataset_name=""):
-    # os.makedirs('plots', exist_ok=True)
+def main(dataset_name: str):
     
-    
-    # data_dir = get_data_path()
-
-    # patients = load_all_metadata(data_dir)
-    # print(f"Total patients: {len(patients)}")
-    # print(f"First patient: {patients[0]}")
-
-    #plot_diagnosis_distribution(patients)
-    #plot_demographics(patients)    
-
-    # plot_ecg_spectrogram(data_dir, patients[3]['id'], save=True)
-
-    # print("Generating 2D Spectrogram for the first patient...")
-    # data = process_entry(data_dir, patients[0]['id'])
-    
-    # precompute_and_save(data_dir, "./spectral_data/precomputed.pkl")
-    
-    # return 
     data = load_precomputed(f"./spectral_data/{dataset_name}.pkl")
   
     X, Y = convert_data_to_vectors(data)
@@ -152,20 +157,21 @@ def main(dataset_name=""):
     
     pairs = []
     
-    for train_index, test_index in k_fold.split(X, Y):
-        print("TRAIN:", train_index, "TEST:", test_index)
-        X_train, X_test = X[train_index], X[test_index]
-        y_train, y_test = Y[train_index], Y[test_index]
+    for model in MODELS:
+        for train_index, test_index in k_fold.split(X, Y):
+            print("TRAIN:", train_index, "TEST:", test_index)
+            X_train, X_test = X[train_index], X[test_index]
+            y_train, y_test = Y[train_index], Y[test_index]
+            
+            pairs.append((X_train, y_train, X_test, y_test))
         
-        pairs.append((X_train, y_train, X_test, y_test))
-    
-    best_model, best_loss = train_and_pick_best(MODELS[0], pairs)
-    
-    best_loss
-    best_model.save()
+        best_model, best_loss = train_and_pick_best(model, pairs)
+        
+        best_loss
+        best_model.save()
     
 
-def test(model_name="cnn-v2", postfix = "", dataset_name=""):
+def test(model_name: str, postfix: str, dataset_name: str):
     data = load_precomputed(f"./spectral_data/{dataset_name}.pkl")
   
     X,Y = convert_data_to_vectors(data)
@@ -199,4 +205,4 @@ DATASET_NAME = "precomputedsplit-genlength-10"
 
 if __name__ == "__main__":
     main(dataset_name = DATASET_NAME)
-    test("cnn-ltsm", "-cnn-ltsm-l10-oversample", dataset_name = DATASET_NAME)
+    # test("cnn-ltsm-time", "-ltsm-time-oversample-l10", dataset_name = DATASET_NAME)
