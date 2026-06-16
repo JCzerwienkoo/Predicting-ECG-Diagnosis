@@ -7,7 +7,6 @@ from sklearn.svm import LinearSVC
 from sklearn.multioutput import MultiOutputClassifier
 import numpy as np
 import keras
-import keras_hub
 from sklearn.metrics import fbeta_score
 import tensorflow as tf
 
@@ -151,7 +150,7 @@ class CNNModel(Model):
         model = keras.Model(inputs, outputs)
         model.compile(
             optimizer=keras.optimizers.Adam(learning_rate=1e-3),
-            loss="categorical_focal_crossentropy",
+            loss="binary_focal_crossentropy",
             metrics=[
                 keras.metrics.BinaryAccuracy(threshold=0.5),
                 keras.metrics.AUC(multi_label=True, num_labels=num_labels),
@@ -253,7 +252,7 @@ class ResNet(Model):
         model = keras.Model(inputs, outputs)
         model.compile(
             optimizer=keras.optimizers.Adam(learning_rate=1e-3),
-            loss="categorical_focal_crossentropy",
+            loss="binary_focal_crossentropy",
             metrics=[
                 keras.metrics.BinaryAccuracy(threshold=0.5),
                 keras.metrics.AUC(multi_label=True, num_labels=num_labels),

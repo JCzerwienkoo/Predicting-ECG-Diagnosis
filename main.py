@@ -15,6 +15,8 @@ from processing import flatten_data_linear, train_test_split, load_precomputed, 
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 from sklearn.model_selection import KFold
 import pickle as pkl
+import tensorflow as tf
+
 
 SAMPLE_SVM = lambda *kwargs: SVMModel("default")
 SAMPLE_CNN = lambda input_shape, num_labels: CNNModel("default", input_shape, num_labels, {
@@ -39,15 +41,77 @@ SAMPLE_CNN = lambda input_shape, num_labels: CNNModel("default", input_shape, nu
         keras.layers.Dropout(0.40),
     ]
 })
+
+SAMPLE_CNN_V2 = lambda input_shape, num_labels: CNNModel("v2", input_shape, num_labels, {
+    "layers": [
+        keras.layers.Conv2D(128, kernel_size=(3,3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal(), kernel_regularizer="L1L2"),
+        keras.layers.BatchNormalization(),
+        keras.layers.MaxPooling2D(pool_size=(2, 2)),
+        keras.layers.Dropout(0.25),
+
+        keras.layers.Conv2D(128, kernel_size=(3,3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal(), kernel_regularizer="L1L2"),
+        keras.layers.BatchNormalization(),
+        keras.layers.MaxPooling2D(pool_size=(2, 2)),
+        keras.layers.Dropout(0.25),
+
+        keras.layers.Conv2D(256, kernel_size=(3,3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal(), kernel_regularizer="L1L2"),
+        keras.layers.BatchNormalization(),
+        keras.layers.MaxPooling2D(pool_size=(2, 2)),
+        keras.layers.Dropout(0.35),
+
+        keras.layers.GlobalAveragePooling2D(),
+        keras.layers.Dense(128, activation="relu", kernel_regularizer="L1L2"),
+        keras.layers.Dropout(0.40),
+    ],
+    "epoch_count": 15
+})
+
+SAMPLE_CNN_LTSM = lambda input_shape, num_labels: CNNModel("ltsm", input_shape, num_labels, {
+    "layers": [
+        keras.layers.Permute((3, 1, 2)),
+        keras.layers.Lambda(lambda x: tf.expand_dims(x, -1)),
+        
+        keras.layers.TimeDistributed(keras.layers.Conv2D(64, kernel_size=(3,3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal())),
+        keras.layers.TimeDistributed(keras.layers.BatchNormalization()),
+        keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2))),
+        keras.layers.TimeDistributed(keras.layers.SpatialDropout2D(0.25)),
+
+        keras.layers.TimeDistributed(keras.layers.Conv2D(128, kernel_size=(3,3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal())),
+        keras.layers.TimeDistributed(keras.layers.BatchNormalization()),
+        keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2))),
+        keras.layers.TimeDistributed(keras.layers.SpatialDropout2D(0.25)),
+
+        keras.layers.TimeDistributed(keras.layers.Conv2D(256, kernel_size=(3,3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal())),
+        keras.layers.TimeDistributed(keras.layers.BatchNormalization()),
+        keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2, 2))),
+        keras.layers.TimeDistributed(keras.layers.SpatialDropout2D(0.35)),
+
+        keras.layers.TimeDistributed(keras.layers.GlobalAveragePooling2D()),
+        keras.layers.TimeDistributed(keras.layers.Flatten()),
+
+        keras.layers.LSTM(128),
+        keras.layers.Dense(128, activation="relu"),
+    ],
+    "epoch_count": 18
+})
+
 SAMPLE_RESNET = lambda input_shape, num_labels: ResNet("default", input_shape, num_labels)
 
 MODELS = [
-    SAMPLE_CNN
+    SAMPLE_CNN_LTSM
 ]
 
-def precompute():
+def precompute( split_extra_samples=None, length_cap=6):
     data_dir = get_data_path()
-    precompute_and_save(data_dir, "./spectral_data/precomputed.pkl")
+    name = ["precomputed"]
+
+    if split_extra_samples:
+        name.append("-split-gen")
+        
+    if length_cap != None:
+        name.append(f"-length-{length_cap}")
+
+    precompute_and_save(data_dir, f"./spectral_data/{''.join(name)}.pkl", split_extra_samples, length_cap)
 
 def test_spectogram():
     data_dir = get_data_path()
@@ -55,7 +119,7 @@ def test_spectogram():
     plot_ecg_spectrogram(data_dir, patients[1]['id'], save=True)
     
 
-def main():
+def main(dataset_name=""):
     # os.makedirs('plots', exist_ok=True)
     
     
@@ -76,7 +140,7 @@ def main():
     # precompute_and_save(data_dir, "./spectral_data/precomputed.pkl")
     
     # return 
-    data = load_precomputed("./spectral_data/precomputed.pkl")
+    data = load_precomputed(f"./spectral_data/{dataset_name}.pkl")
   
     X, Y = convert_data_to_vectors(data)
     Y, mlb = process_labels(Y)
@@ -101,8 +165,8 @@ def main():
     best_model.save()
     
 
-def test():
-    data = load_precomputed("./spectral_data/precomputed.pkl")
+def test(model_name="cnn-v2", postfix = "", dataset_name=""):
+    data = load_precomputed(f"./spectral_data/{dataset_name}.pkl")
   
     X,Y = convert_data_to_vectors(data)
     Y, mlb = process_labels(Y)
@@ -110,7 +174,7 @@ def test():
     X, Y, X_test, Y_test = train_test_split(X, Y)
     
     model: SVMModel = None
-    with open("./models/cnn-default.pkl", "rb") as f:
+    with open(f"./models/{model_name}.pkl", "rb") as f:
         model = pkl.load(f)
 
     if model.training_history is not None:
@@ -118,7 +182,7 @@ def test():
             model.training_history,
             model_name=f'{model.model_name}-{model.variant_name}',
             save=True,
-            output_prefix='plots/training'
+            output_prefix=f'plots/training{postfix}'
         )
 
     Y_pred = model.predict(X_test)
@@ -128,14 +192,11 @@ def test():
         y_pred=Y_pred,
         label_names=[str(c) for c in mlb.classes_],
         save=True,
-        output_prefix='plots/test_multilabel_eval'
+        output_prefix=f'plots/test_multilabel_eval{postfix}'
     )
 
-
-
+DATASET_NAME = "precomputedsplit-genlength-10"
 
 if __name__ == "__main__":
-    # precompute()
-    
-    main()
-    test()
+    main(dataset_name = DATASET_NAME)
+    test("cnn-ltsm", "-cnn-ltsm-l10-oversample", dataset_name = DATASET_NAME)
