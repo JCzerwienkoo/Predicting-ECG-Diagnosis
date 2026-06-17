@@ -3,7 +3,7 @@ import keras
 import matplotlib.pyplot as plt
 import wfdb
 from collections import Counter
-from Model import CNNModel, ResNet, SVMModel, train_and_pick_best
+from Model import CNNModel,  SVMModel, train_and_pick_best
 from data_loader import get_data_path
 from data_loader import load_all_metadata
 from plot import plot_diagnosis_distribution
@@ -18,8 +18,8 @@ import pickle as pkl
 import tensorflow as tf
 
 
-SAMPLE_SVM = lambda *kwargs: SVMModel("default")
-SAMPLE_CNN = lambda input_shape, num_labels: CNNModel("default", input_shape, num_labels, {
+SAMPLE_SVM = lambda *kwargs: SVMModel("default-l10-oversample")
+SAMPLE_CNN = lambda input_shape, num_labels: CNNModel("default-l6-oversample-new", input_shape, num_labels, {
     "layers": [
         keras.layers.Conv2D(64, kernel_size=(3,3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal()),
         keras.layers.BatchNormalization(),
@@ -66,7 +66,7 @@ SAMPLE_CNN_V2 = lambda input_shape, num_labels: CNNModel("v2", input_shape, num_
     "epoch_count": 20
 })
 
-SAMPLE_CNN_LTSM = lambda input_shape, num_labels: CNNModel("ltsm", input_shape, num_labels, {
+SAMPLE_CNN_LTSM = lambda input_shape, num_labels: CNNModel("ltsm-l10-oversample-it25", input_shape, num_labels, {
     "layers": [
         keras.layers.Permute((3, 1, 2)),
         keras.layers.Lambda(lambda x: tf.expand_dims(x, -1)),
@@ -92,11 +92,11 @@ SAMPLE_CNN_LTSM = lambda input_shape, num_labels: CNNModel("ltsm", input_shape, 
         keras.layers.LSTM(128),
         keras.layers.Dense(128, activation="relu"),
     ],
-    "epoch_count": 18
+    "epoch_count": 25
 })
 
 
-SAMPLE_CNN_LTSM_TIME_DEPENDENT = lambda input_shape, num_labels: CNNModel("ltsm-time", input_shape, num_labels, {
+SAMPLE_CNN_LTSM_TIME_DEPENDENT = lambda input_shape, num_labels: CNNModel("ltsm-time-l10-oversample-it25", input_shape, num_labels, {
     "layers": [
         keras.layers.Permute((2, 1, 3)),
         keras.layers.TimeDistributed(keras.layers.Conv1D(64, kernel_size=(3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal())),
@@ -117,12 +117,57 @@ SAMPLE_CNN_LTSM_TIME_DEPENDENT = lambda input_shape, num_labels: CNNModel("ltsm-
         keras.layers.LSTM(128),
         keras.layers.Dense(128, activation="relu"),
     ],
-    "epoch_count": 18
+    "epoch_count": 25
 })
-SAMPLE_RESNET = lambda input_shape, num_labels: ResNet("default", input_shape, num_labels)
+SAMPLE_RESNET = lambda input_shape, num_labels: CNNModel("resnet18", input_shape, num_labels, {
+    "layers": [
+        keras.layers.Conv2D(64, kernel_size=(7, 7), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal()),
+        
+        keras.layers.BatchNormalization(),
+        keras.layers.MaxPooling2D(pool_size=(3, 3)),
+        
+        keras.layers.Dropout(0.25),
+        
+        keras.layers.Conv2D(64, kernel_size=(3, 3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal()),
+        keras.layers.BatchNormalization(),
+        keras.layers.Dropout(0.25),
+        
+        keras.layers.Conv2D(64, kernel_size=(3, 3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal()),
+        keras.layers.BatchNormalization(),
+        keras.layers.Dropout(0.25),
+        
+        keras.layers.Conv2D(128, kernel_size=(3, 3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal()),
+        keras.layers.BatchNormalization(),
+        keras.layers.Dropout(0.25),
+        
+        keras.layers.Conv2D(128, kernel_size=(3, 3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal()),
+        keras.layers.BatchNormalization(),
+        keras.layers.Dropout(0.25),
+
+        keras.layers.Conv2D(256, kernel_size=(3, 3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal()),
+        keras.layers.BatchNormalization(),
+        keras.layers.Dropout(0.25),
+        
+        keras.layers.Conv2D(256, kernel_size=(3, 3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal()),
+        keras.layers.BatchNormalization(),
+        keras.layers.Dropout(0.25),
+        
+        keras.layers.Conv2D(512, kernel_size=(3, 3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal()),
+        keras.layers.BatchNormalization(),
+        keras.layers.Dropout(0.25),
+        
+        keras.layers.Conv2D(512, kernel_size=(3, 3), padding="same", activation="relu", kernel_initializer=keras.initializers.he_normal()),
+        keras.layers.BatchNormalization(),
+        keras.layers.Dropout(0.25),
+
+        keras.layers.GlobalAveragePooling2D(),
+    ],
+    "epoch_count": 20,
+    "output_activation": "softmax"
+})
 
 MODELS = [
-    SAMPLE_CNN_LTSM_TIME_DEPENDENT
+    SAMPLE_SVM
 ]
 
 def precompute( split_extra_samples=None, length_cap=6):
@@ -183,13 +228,13 @@ def test(model_name: str, postfix: str, dataset_name: str):
     with open(f"./models/{model_name}.pkl", "rb") as f:
         model = pkl.load(f)
 
-    if model.training_history is not None:
-        plot_training_history(
-            model.training_history,
-            model_name=f'{model.model_name}-{model.variant_name}',
-            save=True,
-            output_prefix=f'plots/training{postfix}'
-        )
+    # if model.training_history is not None:
+    #     plot_training_history(
+    #         model.training_history,
+    #         model_name=f'{model.model_name}-{model.variant_name}',
+    #         save=True,
+    #         output_prefix=f'plots/training{postfix}'
+    #     )
 
     Y_pred = model.predict(X_test)
 
@@ -201,8 +246,8 @@ def test(model_name: str, postfix: str, dataset_name: str):
         output_prefix=f'plots/test_multilabel_eval{postfix}'
     )
 
-DATASET_NAME = "precomputedsplit-genlength-10"
+DATASET_NAME = "precomputed-split-gen-length-6-old"
 
 if __name__ == "__main__":
-    main(dataset_name = DATASET_NAME)
-    # test("cnn-ltsm-time", "-ltsm-time-oversample-l10", dataset_name = DATASET_NAME)
+    # main(dataset_name = DATASET_NAME)
+    test("svm-default", "-svm-default-l10-oversample", dataset_name = DATASET_NAME)

@@ -157,14 +157,17 @@ class CNNModel(Model):
     def create_model(self, input_shape, num_labels, config):
         inputs = keras.Input(shape=input_shape)
        
-        layers = config.get("layers")
+        layers = config.get("layers") 
+        
+        output_activation = config.get("output_activation", "sigmoid")
+        
         
         x = keras.layers.BatchNormalization()(inputs)
         for layer in layers:
             x = layer(x)
             
         
-        outputs = keras.layers.Dense(num_labels, activation="sigmoid")(x)
+        outputs = keras.layers.Dense(num_labels, activation=output_activation)(x)
 
         model = keras.Model(inputs, outputs)
         model.compile(
@@ -210,110 +213,3 @@ def binarize_prediction(prediction, thresholds):
         y_pred.append(np.array(binarized).astype(int))
 
     return np.array(y_pred) 
-
-class ResNet(Model):
-    def __init__(self, variant_name, input_shape, num_labels, config: dict = {}):
-        super().__init__("resnet", config.get("epoch_count", 3))
-        self.variant_name = variant_name
-        # hackish
-        transformed_shape = self.transform_data(np.zeros([1, *input_shape])).shape[1:]
-        self.model = self.create_model(transformed_shape, num_labels, config or {})
-        
-        self.thresholds = np.full(num_labels, 0.5, dtype=float)
-        
-        
-    def create_model(self, input_shape, num_labels, config):
-        inputs = keras.Input(shape=input_shape)
-        
-        hidden_layer_Activation = config.get("hidden_layer_activation", "relu")
-        
-        x = keras.layers.BatchNormalization()(inputs)
-        x = keras.layers.Conv2D(64, kernel_size=(7, 7), padding="same", activation=hidden_layer_Activation, kernel_initializer=keras.initializers.he_normal())(x)
-        
-        x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.MaxPooling2D(pool_size=(3, 3))(x)
-        
-        x = keras.layers.Dropout(0.25)(x)
-        
-        x = keras.layers.Conv2D(64, kernel_size=(3, 3), padding="same", activation=hidden_layer_Activation, kernel_initializer=keras.initializers.he_normal())(x)
-        x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.Dropout(0.25)(x)
-        
-        x = keras.layers.Conv2D(64, kernel_size=(3, 3), padding="same", activation=hidden_layer_Activation, kernel_initializer=keras.initializers.he_normal())(x)
-        x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.Dropout(0.25)(x)
-        
-        x = keras.layers.Conv2D(128, kernel_size=(3, 3), padding="same", activation=hidden_layer_Activation, kernel_initializer=keras.initializers.he_normal())(x)
-        x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.Dropout(0.25)(x)
-        
-        x = keras.layers.Conv2D(128, kernel_size=(3, 3), padding="same", activation=hidden_layer_Activation, kernel_initializer=keras.initializers.he_normal())(x)
-        x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.Dropout(0.25)(x)
-
-        x = keras.layers.Conv2D(256, kernel_size=(3, 3), padding="same", activation=hidden_layer_Activation, kernel_initializer=keras.initializers.he_normal())(x)
-        x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.Dropout(0.25)(x)
-        
-        x = keras.layers.Conv2D(256, kernel_size=(3, 3), padding="same", activation=hidden_layer_Activation, kernel_initializer=keras.initializers.he_normal())(x)
-        x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.Dropout(0.25)(x)
-        
-        x = keras.layers.Conv2D(512, kernel_size=(3, 3), padding="same", activation=hidden_layer_Activation, kernel_initializer=keras.initializers.he_normal())(x)
-        x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.Dropout(0.25)(x)
-        
-        x = keras.layers.Conv2D(512, kernel_size=(3, 3), padding="same", activation=hidden_layer_Activation, kernel_initializer=keras.initializers.he_normal())(x)
-        x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.Dropout(0.25)(x)
-
-        x = keras.layers.GlobalAveragePooling2D()(x)
-        outputs = keras.layers.Dense(num_labels, activation="softmax")(x)
-
-        model = keras.Model(inputs, outputs)
-        model.compile(
-            optimizer=keras.optimizers.Adam(learning_rate=1e-3),
-            loss="binary_focal_crossentropy",
-            metrics=[
-                keras.metrics.BinaryAccuracy(threshold=0.5),
-                keras.metrics.AUC(multi_label=True, num_labels=num_labels),
-            ],
-        )
-        
-        return model
-        
-        
-    def train(self, X, Y):
-        X = self.transform_data(X)
-        fit_results = self.model.fit(x=X, y=Y, epochs=self.epoch_count)
-        
-        self.training_history = fit_results
-        
-        # Y_pred = self.model.predict(X)
-        
-        # self.thresholds = tune_thresholds_per_label(Y, Y_pred, base_thresholds=self.thresholds)
-        
-        return fit_results
-    
-    def _test(self, X, Y):
-        X = self.transform_data(X)
-        return self.model.evaluate(X, Y, return_dict=True)["loss"]
-    
-    def predict(self, X):
-        X = self.transform_data(X)
-        prediction = self.model.predict(X)
-        
-        y_pred = []
-        for y in prediction:
-            binarized = []
-            for i in range(len(self.thresholds)):
-                binarized.append(y[i] >= self.thresholds[i])
-            y_pred.append(np.array(binarized).astype(int))
-
-        return np.array(y_pred)
-    
-    def transform_data(self, X):
-        return transpose_entries(X)
-    
-    
-    
